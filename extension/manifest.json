@@ -1,10 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "Public Reel Collector - Local Prototype",
-  "version": "0.1.0",
+  "name": "Reelroom \u2014 Public Reel Collector",
+  "version": "0.2.0",
   "description": "Collect visible public Instagram reel links and attribution metadata for a local research collection.",
-  "permissions": ["activeTab", "downloads", "storage"],
-  "host_permissions": ["https://www.instagram.com/*"],
-  "action": {"default_popup": "popup.html"},
-  "content_scripts": [{"matches": ["https://www.instagram.com/*"], "js": ["content.js"], "run_at": "document_idle"}]
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

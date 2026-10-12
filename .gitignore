@@ -37,3 +37,8 @@ secrets*.json
 
 # Browser/session exports
 instagram_reels_collection.json
+
+# Gandharva private cloud credentials
+cloud/.env
+cloud/.env.*
+!cloud/.env.example

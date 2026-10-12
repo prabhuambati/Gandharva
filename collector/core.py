@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -24,6 +25,20 @@ EXPORT_DIR = DATA_DIR / "exports"
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def normalize_instagram_media_url(value: str) -> str:
+    """Canonical identity by case-sensitive shortcode; not proof a post is video."""
+    value = str(value or "").strip()
+    if value.startswith("/"):
+        value = "https://www.instagram.com" + value
+    elif value.startswith(("instagram.com/", "www.instagram.com/", "m.instagram.com/")):
+        value = "https://" + value
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname not in {"instagram.com", "www.instagram.com", "m.instagram.com"} or parsed.username or parsed.password:
+        return ""
+    match = re.fullmatch(r"/(?:[A-Za-z0-9_.]+/)?(?:p|reel|reels)/([A-Za-z0-9_-]+)/?", parsed.path)
+    return f"https://www.instagram.com/reel/{match.group(1)}/" if match else ""
 
 
 def slug(value: str) -> str:
@@ -432,6 +447,10 @@ def classify_record(record: ReelRecord) -> ReelRecord:
 
 
 def upsert_record(record: ReelRecord, db: sqlite3.Connection | None = None) -> tuple[str, bool]:
+    canonical = normalize_instagram_media_url(record.reel_url)
+    if not canonical:
+        raise ValueError("Invalid Instagram media URL")
+    record.reel_url = canonical
     own = db is None
     db = db or connect()
     if not record.collected_at:
@@ -454,13 +473,22 @@ def upsert_record(record: ReelRecord, db: sqlite3.Connection | None = None) -> t
             "profile_photo_url": record.profile_photo_url,
             "instagram_id": record.instagram_id,
         }, db)
-    existing = db.execute("SELECT id FROM reels WHERE reel_url = ?", (record.reel_url,)).fetchone()
+    existing = db.execute("SELECT * FROM reels WHERE reel_url = ?", (record.reel_url,)).fetchone()
+    if not existing:
+        # Match legacy URL variants without deleting or rewriting historical rows.
+        existing = next((row for row in db.execute("SELECT * FROM reels")
+                         if normalize_instagram_media_url(row["reel_url"]) == canonical), None)
     record_id = existing["id"] if existing else uuid.uuid4().hex
     fields = asdict(record)
     fields.update({"id": record_id, "updated_at": utc_now()})
     columns = list(fields.keys()) + ["updated_at"] if "updated_at" not in fields else list(fields.keys())
     values = [fields[c] for c in columns]
     if existing:
+        for key in fields:
+            if key not in {"id", "updated_at", "reel_url"} and fields[key] in {"", None, 0, 0.0} and existing[key]:
+                fields[key] = existing[key]
+        fields["status"] = existing["status"]
+        fields["collected_at"] = existing["collected_at"]
         assignments = ", ".join(f"{c} = ?" for c in columns if c != "id")
         db.execute(f"UPDATE reels SET {assignments} WHERE id = ?", [fields[c] for c in columns if c != "id"] + [record_id])
     else:
@@ -475,8 +503,8 @@ def import_records(records: Iterable[dict[str, Any]], source_kind: str = "", sou
     db = connect()
     added = updated = skipped = 0
     for raw in records:
-        reel_url = str(raw.get("reel_url") or raw.get("url") or "").strip()
-        if not reel_url or "instagram.com" not in reel_url:
+        reel_url = normalize_instagram_media_url(raw.get("reel_url") or raw.get("url") or "")
+        if not reel_url:
             skipped += 1
             continue
         raw = {k: v for k, v in raw.items() if k in ReelRecord.__dataclass_fields__}
@@ -531,6 +559,12 @@ def find_ffmpeg() -> str | None:
     system_ffmpeg = shutil.which("ffmpeg")
     if system_ffmpeg:
         return system_ffmpeg
+    # Normal virtual-environment installation is the portable default.
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except (ImportError, RuntimeError, OSError):
+        pass
     vendor_dir = BASE_DIR / ".vendor"
     if vendor_dir.exists():
         sys.path.insert(0, str(vendor_dir))

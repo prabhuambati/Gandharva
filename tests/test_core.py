@@ -55,6 +55,35 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(result["song_title"], "")
         self.assertEqual(result["method"], "unidentified")
 
+    def test_media_url_variants(self):
+        for url in ["https://instagram.com/p/AbC_12/?igsh=x", "http://m.instagram.com/reels/AbC_12#x", "/reel/AbC_12/", "www.instagram.com/reel/AbC_12", "https://www.instagram.com/artist/reel/AbC_12/"]:
+            self.assertEqual(core.normalize_instagram_media_url(url), "https://www.instagram.com/reel/AbC_12/")
+
+    def test_invalid_media_urls(self):
+        for url in ["https://instagram.com.evil.com/reel/a/", "https://evil.com/?instagram.com", "https://www.instagram.com/reels/audio/123/", "https://www.instagram.com/artist/", "https://user@instagram.com/reel/a/"]:
+            self.assertEqual(core.normalize_instagram_media_url(url), "")
+
+    def test_variant_import_preserves_review_and_metadata(self):
+        core.import_records([{"reel_url": "https://instagram.com/p/AbC/", "username": "artist", "song_title": "Known song"}])
+        original = core.records()[0]
+        core.update_status(original["id"], "accepted")
+        result = core.import_records([{"reel_url": "https://m.instagram.com/reels/AbC/?igsh=x"}])
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(len(core.records()), 1)
+        row = core.records()[0]
+        self.assertEqual(row["status"], "accepted")
+        self.assertEqual(row["song_title"], "Known song")
+        self.assertEqual(row["username"], "artist")
+
+    def test_legacy_variant_matches_existing_row(self):
+        core.import_records([{"reel_url": "https://instagram.com/reel/Legacy/"}])
+        db = core.connect()
+        db.execute("UPDATE reels SET reel_url = ?", ("https://instagram.com/p/Legacy/?igsh=old",))
+        db.commit(); db.close()
+        result = core.import_records([{"reel_url": "https://www.instagram.com/reels/Legacy/"}])
+        self.assertEqual(result["updated"], 1)
+        self.assertEqual(len(core.records()), 1)
+
     def test_explicit_singing_is_a_candidate(self):
         item = core.classify_record(core.ReelRecord(reel_url="https://www.instagram.com/reel/singing/", caption="A cappella singing session"))
         self.assertEqual(item.performance_type, "singing")

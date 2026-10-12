@@ -1,0 +1,21 @@
+{
+  "creators": [
+    {
+      "instagram_handle": "example_creator"
+    }
+  ],
+  "tracks": [
+    {
+      "legacy_id": "example-1",
+      "instagram_handle": "example_creator",
+      "title": "Example acoustic performance",
+      "title_provenance": "unidentified",
+      "source_url": "https://www.instagram.com/reel/EXAMPLE001/",
+      "creator_credits": [
+        "example_creator"
+      ],
+      "performance_type": "instrument",
+      "instrument": "guitar"
+    }
+  ]
+}

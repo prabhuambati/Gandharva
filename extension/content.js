@@ -1,5 +1,13 @@
 (() => {
-  const normalize = (url) => { try { const u = new URL(url, location.href); return u.origin + u.pathname.replace(/\/+$/, '/') } catch { return '' } };
+  const normalize = (url) => {
+    try {
+      const u = new URL(url, 'https://www.instagram.com');
+      if (!['http:', 'https:'].includes(u.protocol) || !['instagram.com','www.instagram.com','m.instagram.com'].includes(u.hostname) || u.username || u.password) return '';
+      const media = u.pathname.match(/^\/(?:[A-Za-z0-9_.]+\/)?(?:p|reel|reels)\/([A-Za-z0-9_-]+)\/?$/);
+      if (media) return `https://www.instagram.com/reel/${media[1]}/`;
+      return 'https://www.instagram.com' + u.pathname.replace(/\/+$/, '/') ;
+    } catch { return ''; }
+  };
   const profileFromLink = (a) => {
     const href = normalize(a?.href || '');
     if (!href || !href.includes('instagram.com')) return {};
@@ -13,7 +21,7 @@
     const urls = [...document.querySelectorAll('a[href*="/reel/"], a[href*="/reels/"]')];
     const output = new Map();
     for (const a of urls) {
-      const reel_url = normalize(a.href); if (!reel_url) continue;
+      const reel_url = normalize(a.href); if (!/^https:\/\/www\.instagram\.com\/reel\/[A-Za-z0-9_-]+\/$/.test(reel_url)) continue;
       const container = a.closest('article') || a.closest('div');
       const profileAnchor = container?.querySelector('a[href^="/"]:not([href*="/reel/"]):not([href*="/reels/"])');
       const profile = profileFromLink(profileAnchor);
